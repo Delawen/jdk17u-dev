@@ -671,3 +671,33 @@ bool VirtualMemoryTracker::walk_virtual_memory(VirtualMemoryWalker* walker) {
    }
   return true;
 }
+
+class PrintRegionWalker : public VirtualMemoryWalker {
+private:
+  const address               _p;
+  outputStream*               _st;
+public:
+  PrintRegionWalker(const void* p, outputStream* st) :
+    _p((address)p), _st(st) { }
+
+  bool do_allocation_site(const ReservedMemoryRegion* rgn) {
+    if (rgn->contain_address(_p)) {
+      _st->print_cr(PTR_FORMAT " in mmap'd memory region [" PTR_FORMAT " - " PTR_FORMAT "] by %s",
+        p2i(_p), p2i(rgn->base()), p2i(rgn->base() + rgn->size()), rgn->flag_name());
+      if (MemTracker::tracking_level() == NMT_detail) {
+        rgn->call_stack()->print_on(_st);
+        _st->cr();
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+// If p is contained within a known memory region, print information about it to the
+// given stream and return true; false otherwise.
+bool VirtualMemoryTracker::print_containing_region(const void* p, outputStream* st) {
+  PrintRegionWalker walker(p, st);
+  return !walk_virtual_memory(&walker);
+
+}

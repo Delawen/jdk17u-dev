@@ -484,7 +484,23 @@ extern "C" JNIEXPORT void pp(void* p) {
     oop obj = cast_to_oop(p);
     obj->print();
   } else {
-    tty->print(PTR_FORMAT, p2i(p));
+    // Ask NMT about this pointer.
+    // GDB note: We will be using SafeFetch to access the supposed malloc header. If the address is
+    // not readable, this will generate a signal. That signal will trip up the debugger: gdb will
+    // catch the signal and disable the pp() command for further use.
+    // In order to avoid that, switch off SIGSEGV handling with "handle SIGSEGV nostop" before
+    // invoking pp()
+    if (MemTracker::enabled()) {
+      // Does it point into a known mmaped region?
+      if (VirtualMemoryTracker::print_containing_region(p, tty)) {
+        return;
+      }
+      // Does it look like the start of a malloced block?
+      if (MallocTracker::print_pointer_information(p, tty)) {
+        return;
+      }
+    }
+    tty->print_cr(PTR_FORMAT, p2i(p));
   }
 }
 
